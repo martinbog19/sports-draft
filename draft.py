@@ -92,6 +92,9 @@ LEAGUES = {
     "College Football": "kxncaaf-27",
     "Premier League": "kxpremierleague-27",
     "NBA": "kxnba-27",
+    "WNBA": "kxwnba-26",
+    "World Darts Championship": "kxpdcdarts-27",
+    "NHL": "kxnhl-27",   
 }
 
 # ==========================
