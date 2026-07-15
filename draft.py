@@ -91,6 +91,7 @@ LEAGUES = {
     "US Open Women": "kxwta-26uso",
     "College Football": "kxncaaf-27",
     "Premier League": "kxpremierleague-27",
+    "NBA": "kxnba-27",
 }
 
 # ==========================
@@ -164,8 +165,6 @@ if st.session_state.page == "setup":
     )
 
     with st.spinner("Fetching Kalshi data..."):
-        import time
-        time.sleep(2)  # Simulate a delay for fetching data
         data = pd.DataFrame()
         for league_name in selected_leagues:
             league_ticker = LEAGUES[league_name]
