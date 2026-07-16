@@ -2,6 +2,8 @@ import streamlit as st
 import pandas as pd
 import requests
 
+from src.api import get_kalshi_data, get_polymarket_data
+
 
 # ==========================
 # CONFIG
@@ -55,46 +57,20 @@ if "player_inputs" not in st.session_state:
         "Player 2"
     ]
 
-def get_event(event_ticker):
-
-    event_ticker = event_ticker.upper().strip()
-
-    url = f"https://api.elections.kalshi.com/trade-api/v2/markets?event_ticker={event_ticker}"
-    response = requests.get(url)
-
-    teams = []
-    probs = []
-
-    for market in response.json()['markets']:
-
-        team = market["yes_sub_title"].strip()
-        teams.append(team)
-
-        ask_price = float(market["previous_yes_ask_dollars"])
-        bid_price = float(market["previous_yes_bid_dollars"])
-        prob = 100 * (ask_price + bid_price) / 2 if (ask_price > 0 and bid_price > 0) else 0
-        probs.append(prob)
-
-    df = pd.DataFrame(
-        {
-            "team": teams,
-            "prob": probs
-        }
-    )
-    df["prob"] = 100 * df["prob"] / df["prob"].sum()
-
-    return df
-
+# LEAGUES = {
+#     "US Open Men": "kxatp-26uso",
+#     "US Open Women": "kxwta-26uso",
+#     "College Football": "kxncaaf-27",
+#     "Premier League": "kxpremierleague-27",
+#     "NBA": "kxnba-27",
+#     "WNBA": "kxwnba-26",
+#     "World Darts Championship": "kxpdcdarts-27",
+#     "NHL": "kxnhl-27",
+# }
 
 LEAGUES = {
-    "US Open Men": "kxatp-26uso",
-    "US Open Women": "kxwta-26uso",
-    "College Football": "kxncaaf-27",
-    "Premier League": "kxpremierleague-27",
-    "NBA": "kxnba-27",
-    "WNBA": "kxwnba-26",
-    "World Darts Championship": "kxpdcdarts-27",
-    "NHL": "kxnhl-27",   
+    "NBA": "nba-2027-champion",
+    "NFL": "big-game-champion-2027",
 }
 
 # ==========================
@@ -107,9 +83,9 @@ if st.session_state.page == "setup":
 
     # ---- Drafters ----
 
-    st.header("Drafters")
+    st.subheader("Players")
 
-    if st.button("➕ Add drafter"):
+    if st.button("Add player"):
 
         st.session_state.player_inputs.append(
             f"Player {len(st.session_state.player_inputs)+1}"
@@ -126,8 +102,8 @@ if st.session_state.page == "setup":
 
         players.append(
             st.text_input(
-                f"Drafter {i+1}",
-                value=default,
+                f"Player {i+1}",
+                placeholder=default,
                 key=f"player_{i}"
             )
         )
@@ -135,28 +111,35 @@ if st.session_state.page == "setup":
 
     # ---- Settings ----
 
-    st.header("Draft Settings")
+    st.subheader("Draft Settings")
 
+    c1, c2, c3, c4 = st.columns([1, 2, 2, 4])
 
-    snake = st.toggle(
-        "🐍 Snake Draft",
-        value=True
-    )
+    with c1:
+        snake = st.toggle(
+            "Snake Draft",
+            value=True
+        )
 
+    with c2:
+        rounds = st.number_input(
+            "Number of rounds",
+            min_value=1,
+            max_value=100,
+            value=5
+        )
 
-    rounds = st.number_input(
-        "Number of rounds",
-        min_value=1,
-        max_value=100,
-        value=5
-    )
+    with c3:
 
+        mode = st.pills("Game mode", ["Easy", "Blurred", "Expert"], default="Easy", help="Select a game mode", width="stretch")
+        if mode != "Expert":
+            odds_provider = st.pills("Odds provider", ["Kalshi", "Polymarket"], width="stretch")
 
     # ---- Leagues ----
 
-    st.header("Draft Pool")
+    st.subheader("Draft Pool")
 
-    st.write(
+    st.caption(
         "Select leagues available in the draft:"
     )
 
@@ -167,16 +150,18 @@ if st.session_state.page == "setup":
         key="league_multiselect"
     )
 
+    
+    
     with st.spinner("Fetching Kalshi data..."):
         data = pd.DataFrame()
         for league_name in selected_leagues:
             league_ticker = LEAGUES[league_name]
-            league_events = get_event(league_ticker)
+            league_events = get_polymarket_data(league_ticker)
             league_events["league"] = league_name
             data = pd.concat([data, league_events], ignore_index=True)
 
 
-    # ---- Start ----
+# ---- Start ----
 
     st.divider()
 
@@ -279,7 +264,7 @@ elif st.session_state.page == "draft":
     st.subheader(
         f"Round {st.session_state.round}/{st.session_state.rounds} "
         f"• Pick {pick_number} "
-        f"• ⏱ {current_player} is on the clock"
+        f"• {current_player} is on the clock"
     )
 
 
@@ -364,7 +349,6 @@ elif st.session_state.page == "draft":
         h1.markdown("**Team**")
         h2.markdown("**League**")
         h3.markdown("**Win Probability**")
-        h4.markdown("**Action**")
 
 
 
@@ -406,6 +390,10 @@ elif st.session_state.page == "draft":
                 "Draft",
                 key=f"draft_{idx}"
             ):
+                
+                st.toast(
+                    f"Pick {pick_number}: **{current_player}** chose **{row['team']}**.", duration=10
+                )
 
                 st.session_state.drafts[
                     current_player
