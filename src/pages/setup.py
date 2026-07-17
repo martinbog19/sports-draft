@@ -46,7 +46,7 @@ def render_setup_page():
         mode = st.pills(
             "Game mode", ["Easy", "Blurred", "Expert"],
             default="Easy",
-            help="Select a game mode",
+            help="Easy: shows % odds · Blurred: color only · Expert: no odds",
             width="stretch"
         )
         if mode != "Expert":
@@ -71,22 +71,14 @@ def render_setup_page():
 
     selected_leagues = st.multiselect(
         "Leagues",
-        options=list(leagues.keys()),
-        default=list(leagues.keys()),
-        key="league_multiselect"
+        options=sorted(leagues.keys()),
+        default=sorted(leagues.keys()),
+        key=f"league_multiselect_{odds_provider}"
     )
-
-    with st.spinner(f"Fetching odds data from {odds_provider}..."):
-        data = pd.DataFrame()
-        for league_name in selected_leagues:
-            league_events = fetch_league_fn(leagues[league_name])
-            league_events["league"] = league_name
-            data = pd.concat([data, league_events], ignore_index=True)
-
 
     st.divider()
 
-    if data is not None and st.button("Start Draft!", type="primary"):
+    if st.button("Start Draft!", type="primary"):
         players = [p.strip() for p in players if p.strip()]
 
         if len(players) < 2:
@@ -97,14 +89,20 @@ def render_setup_page():
             st.error("Player names must be unique.")
             st.stop()
 
-        draft_pool = (
-            data[data["league"].isin(selected_leagues)]
-            .sort_values("prob", ascending=False)
-        )
+        with st.spinner(f"Fetching odds data from {odds_provider}..."):
+            data = pd.DataFrame()
+            for league_name in selected_leagues:
+                league_events = fetch_league_fn(leagues[league_name])
+                league_events["league"] = league_name
+                data = pd.concat([data, league_events], ignore_index=True)
+
+        draft_pool = data.sort_values("prob", ascending=False)
 
         st.session_state.players = players
         st.session_state.snake = snake
         st.session_state.rounds = rounds
+        st.session_state.mode = mode
+        st.session_state.leagues = sorted(draft_pool["league"].unique().tolist())
         st.session_state.data = draft_pool
         st.session_state.drafts = {p: [] for p in players}
         st.session_state.round = 1

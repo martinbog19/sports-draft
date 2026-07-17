@@ -12,6 +12,12 @@ def prob_color(prob):
         return "red"
 
 
+def prob_color_continuous(prob, max_prob=25.0):
+    t = min(prob / max_prob, 1.0)
+    hue = int(t * 120)  # 0 = red, 120 = green
+    return f"hsl({hue}, 70%, 42%)"
+
+
 def create_results_csv(drafts):
     rows = []
     for player, teams in drafts.items():
