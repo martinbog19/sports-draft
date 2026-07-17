@@ -1,8 +1,8 @@
 import pandas as pd
 import streamlit as st
 
-from src.api import get_polymarket_data
-from src.config import LEAGUES
+from src.api import get_kalshi_data, get_polymarket_data
+from src.config import KALSHI_LEAGUES, POLYMARKET_LEAGUES
 
 
 def render_setup_page():
@@ -50,31 +50,39 @@ def render_setup_page():
             width="stretch"
         )
         if mode != "Expert":
-            odds_provider = st.pills(  # noqa: F841 — WIP
+            odds_provider = st.pills(
                 "Odds provider", ["Kalshi", "Polymarket"],
+                default="Polymarket",
                 width="stretch"
             )
+        else:
+            odds_provider = None
 
-    # ---- Leagues ----
+    if odds_provider == "Kalshi":
+        leagues = KALSHI_LEAGUES
+        fetch_league_fn = get_kalshi_data
+    else:
+        leagues = POLYMARKET_LEAGUES
+        fetch_league_fn = get_polymarket_data
 
-    st.subheader("Draft Pool")
+
+    st.subheader("Draft pool")
     st.caption("Select leagues available in the draft:")
 
     selected_leagues = st.multiselect(
         "Leagues",
-        options=list(LEAGUES.keys()),
-        default=list(LEAGUES.keys()),
+        options=list(leagues.keys()),
+        default=list(leagues.keys()),
         key="league_multiselect"
     )
 
-    with st.spinner("Fetching odds data..."):
+    with st.spinner(f"Fetching odds data from {odds_provider}..."):
         data = pd.DataFrame()
         for league_name in selected_leagues:
-            league_events = get_polymarket_data(LEAGUES[league_name])
+            league_events = fetch_league_fn(leagues[league_name])
             league_events["league"] = league_name
             data = pd.concat([data, league_events], ignore_index=True)
 
-    # ---- Start ----
 
     st.divider()
 
