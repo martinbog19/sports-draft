@@ -22,7 +22,7 @@ def _confirm_custom_pick_dialog(pending, current_player, pick_number, n_players)
 
 def render_draft_page():
     if "pending_toast" in st.session_state:
-        st.toast(st.session_state.pending_toast, duration=10)
+        st.toast(st.session_state.pending_toast, duration=5)
         del st.session_state.pending_toast
 
     players = st.session_state.players
