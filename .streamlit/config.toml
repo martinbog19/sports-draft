@@ -10,4 +10,3 @@ headless = true                   # cleaner startup, no browser warning
 
 [client]
 showSidebarNavigation = false     # hides auto-generated page nav if you add pages later
-toolbarMode = "minimal"           # hides the top-right Streamlit menu clutter
