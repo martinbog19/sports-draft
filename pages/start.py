@@ -82,7 +82,7 @@ ready = (
 if st.button("Create draft!", type="primary", disabled=not ready):
 
     user = st.session_state.get("user", {})
-    result = create_room(user.get("id"), user.get("display_name", "Host"), draft_name, snake, rounds, mode)
+    result = create_room(user.get("id"), user.get("display_name", "Host"), draft_name, snake, rounds, mode, odds_provider, selected_leagues)
 
     if result.status_code == 200:
         st.session_state.room_code = result.json()["code"]

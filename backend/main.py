@@ -2,6 +2,7 @@ from fastapi import FastAPI, HTTPException
 from supabase import create_client
 from pydantic import BaseModel
 from dotenv import load_dotenv
+from typing import Optional
 import os, random, string
 
 load_dotenv()
@@ -24,6 +25,7 @@ class CreateRoomRequest(BaseModel):
     snake: bool = True
     rounds: int = 5
     mode: str = "Easy"
+    odds_provider: Optional[str] = None
     leagues: list[str] = []
 
 
@@ -37,6 +39,8 @@ def create_room(req: CreateRoomRequest):
         "snake": req.snake,
         "rounds": req.rounds,
         "mode": req.mode,
+        "odds_provider": req.odds_provider,
+        "leagues": req.leagues,
         "status": "lobby"
     }).execute().data[0]
 
@@ -64,6 +68,10 @@ def join_room(code: str, req: JoinRoomRequest):
         raise HTTPException(400, "Draft already started")
 
     players = db.table("room_players").select("*").eq("room_id", room["id"]).execute().data
+
+    if any(p["user_id"] == req.user_id for p in players):
+        raise HTTPException(400, "You're already in this draft")
+
     seat = len(players)
 
     db.table("room_players").insert({
@@ -108,6 +116,59 @@ def list_rooms(user_id: str):
         return {"rooms": []}
     rooms = db.table("rooms").select("*").in_("id", room_ids).execute().data
     return {"rooms": rooms}
+
+
+class UpdateRoomRequest(BaseModel):
+    user_id: str
+    draft_name: Optional[str] = None
+    snake: Optional[bool] = None
+    rounds: Optional[int] = None
+    mode: Optional[str] = None
+    odds_provider: Optional[str] = None
+    leagues: Optional[list[str]] = None
+
+
+@app.put("/rooms/{code}")
+def update_room(code: str, req: UpdateRoomRequest):
+    room = db.table("rooms").select("*").eq("code", code).single().execute().data
+    if not room:
+        raise HTTPException(404, "Room not found")
+    if room["host_id"] != req.user_id:
+        raise HTTPException(403, "Only the host can edit this draft")
+    if room["status"] != "lobby":
+        raise HTTPException(400, "Cannot edit a draft that has already started")
+
+    updates = {k: v for k, v in {
+        "draft_name": req.draft_name,
+        "snake": req.snake,
+        "rounds": req.rounds,
+        "mode": req.mode,
+        "odds_provider": req.odds_provider,
+        "leagues": req.leagues,
+    }.items() if v is not None}
+
+    if updates:
+        try:
+            db.table("rooms").update(updates).eq("id", room["id"]).execute()
+        except Exception as e:
+            raise HTTPException(500, f"Database error: {e}")
+    return {"ok": True}
+
+
+@app.delete("/rooms/{code}")
+def delete_room(code: str, user_id: str):
+    room = db.table("rooms").select("*").eq("code", code).single().execute().data
+    if not room:
+        raise HTTPException(404, "Room not found")
+    if room["host_id"] != user_id:
+        raise HTTPException(403, "Only the host can delete this draft")
+
+    rid = room["id"]
+    db.table("picks").delete().eq("room_id", rid).execute()
+    db.table("pool").delete().eq("room_id", rid).execute()
+    db.table("room_players").delete().eq("room_id", rid).execute()
+    db.table("rooms").delete().eq("id", rid).execute()
+    return {"ok": True}
 
 
 ### Endpoint 5 — Make a pick
