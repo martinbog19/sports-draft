@@ -1,5 +1,7 @@
+import pandas as pd
 import streamlit as st
 
+from src.api import get_kalshi_data, get_polymarket_data
 from src.client import join_room, list_rooms, update_room, delete_room
 from src.config import KALSHI_LEAGUES, POLYMARKET_LEAGUES
 
@@ -13,7 +15,8 @@ if "user" not in st.session_state:
 
 col_title, col_user = st.columns([4, 1])
 with col_title:
-    st.title("The field")
+    _greeting = st.session_state.user.get("display_name") or st.session_state.user.get("username", "")
+    st.subheader(f"Welcome to the field, {_greeting}!")
 with col_user:
     st.caption(st.session_state.user.get("username") or st.session_state.user.get("email", ""))
     if st.button("Sign out", use_container_width=True):
@@ -128,6 +131,35 @@ if c1.button("＋ Create new draft", type="primary", use_container_width=True):
 if c2.button("Enter a code", use_container_width=True):
     join_draft_dialog()
 
+# ── Dev shortcut ───────────────────────────────────────────────────────────────
+
+with st.expander("🚧 Dev tools"):
+    dev_provider = st.pills("Provider", ["Polymarket", "Kalshi"], default="Polymarket", key="dev_provider")
+    if st.button("Launch draft with live odds", use_container_width=True):
+        leagues = KALSHI_LEAGUES if dev_provider == "Kalshi" else POLYMARKET_LEAGUES
+        fetch_fn = get_kalshi_data if dev_provider == "Kalshi" else get_polymarket_data
+        with st.spinner(f"Fetching odds from {dev_provider}..."):
+            data = pd.DataFrame()
+            for league_name, slug in leagues.items():
+                try:
+                    df = fetch_fn(slug)
+                    df["league"] = league_name
+                    data = pd.concat([data, df], ignore_index=True)
+                except Exception:
+                    pass
+        data = data.sort_values("prob", ascending=False)
+        players = ["Alice", "Bob", "Charlie"]
+        st.session_state.players = players
+        st.session_state.snake = True
+        st.session_state.round = 1
+        st.session_state.pick = 0
+        st.session_state.rounds = 5
+        st.session_state.drafts = {p: [] for p in players}
+        st.session_state.mode = "Easy"
+        st.session_state.leagues = sorted(data["league"].unique().tolist())
+        st.session_state.data = data
+        st.switch_page("pages/draft.py")
+
 
 # ── My Drafts ──────────────────────────────────────────────────────────────────
 
@@ -222,3 +254,17 @@ if "editing_room" in st.session_state:
     edit_draft_dialog()
 if "deleting_room" in st.session_state:
     delete_draft_dialog()
+
+
+
+# if st.button("First pick lol"):
+
+#     import numpy as np
+#     import time
+#     names = ["Alice", "Bob", "Charlie"]
+#     pick = np.random.randint(0, len(names))
+#     sleeps = np.exp(np.linspace(-20, 0, 200 + pick))
+#     container = st.empty()
+#     for i, sleep_time in enumerate(sleeps):
+#         container.write(names[i % len(names)])
+#         time.sleep(sleep_time)

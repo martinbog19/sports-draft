@@ -7,6 +7,7 @@ pg = st.navigation(
         st.Page("pages/login.py", title="Login", default=True),
         st.Page("pages/home.py", title="Home"),
         st.Page("pages/start.py", title="Setup"),
+        st.Page("pages/draft.py", title="Draft"),
     ],
     position="hidden",
 )
