@@ -3,6 +3,7 @@ import streamlit as st
 
 from src.api import get_kalshi_data, get_polymarket_data
 from src.config import KALSHI_LEAGUES, POLYMARKET_LEAGUES
+from src.client import create_room
 
 
 def render_setup_page():
@@ -88,6 +89,11 @@ def render_setup_page():
         if len(set(players)) < len(players):
             st.error("Player names must be unique.")
             st.stop()
+        
+        host_name = "Martin_test"
+        result = create_room(host_name, snake, rounds, mode)
+        st.session_state.room_code = result["code"]
+        st.session_state.page = "lobby"  # new waiting screen
 
         with st.spinner(f"Fetching odds data from {odds_provider}..."):
             data = pd.DataFrame()
@@ -107,6 +113,6 @@ def render_setup_page():
         st.session_state.drafts = {p: [] for p in players}
         st.session_state.round = 1
         st.session_state.pick = 0
-        st.session_state.page = "draft"
+        # st.session_state.page = "draft"
 
-        st.rerun()
+        # st.rerun()
