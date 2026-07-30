@@ -1,12 +1,21 @@
 import { useState, useEffect } from 'react';
 
+const EVENTS = [
+  { ticker: 'KXPREMIERLEAGUE-27', label: 'Premier League' },
+  { ticker: 'KXNHL-27', label: 'NHL' },
+  { ticker: 'KXNBA-27', label: 'NBA' },
+];
+
 function App() {
+  const [eventTicker, setEventTicker] = useState(EVENTS[0].ticker);
+  const [refreshKey, setRefreshKey] = useState(0);
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [sortDir, setSortDir] = useState('desc');
 
   useEffect(() => {
     const fetchData = async () => {
-      const eventTicker = 'KXPREMIERLEAGUE-27'; // .upper().strip() done manually here
+      setLoading(true);
       const url = `/kalshi-api/trade-api/v2/markets?event_ticker=${eventTicker}`;
       const response = await fetch(url);
       const json = await response.json();
@@ -30,23 +39,46 @@ function App() {
     };
 
     fetchData();
-  }, []);
+  }, [eventTicker, refreshKey]);
 
-  if (loading) return <p style={{ padding: '2rem' }}>Loading...</p>;
+  const currentLabel = EVENTS.find((e) => e.ticker === eventTicker)?.label ?? eventTicker;
+
+  const sortedData = [...data].sort((a, b) =>
+    sortDir === 'asc' ? a.prob - b.prob : b.prob - a.prob
+  );
+
+  const toggleSort = () => setSortDir((dir) => (dir === 'asc' ? 'desc' : 'asc'));
 
   return (
     <div style={{ padding: '2rem', fontFamily: 'sans-serif' }}>
-      <h2>Premier League Markets</h2>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem' }}>
+        <h2 style={{ margin: 0 }}>{currentLabel} Markets</h2>
+        <select value={eventTicker} onChange={(e) => setEventTicker(e.target.value)}>
+          {EVENTS.map((event) => (
+            <option key={event.ticker} value={event.ticker}>
+              {event.label}
+            </option>
+          ))}
+        </select>
+        <button onClick={() => setRefreshKey((k) => k + 1)} disabled={loading}>
+          {loading ? 'Refreshing...' : 'Refresh'}
+        </button>
+      </div>
+      {loading ? (
+        <p>Loading...</p>
+      ) : (
       <table border="1" cellPadding="8" style={{ borderCollapse: 'collapse' }}>
         <thead>
           <tr>
             <th>Sub Title</th>
             <th>Price</th>
-            <th>Prob (%)</th>
+            <th onClick={toggleSort} style={{ cursor: 'pointer', userSelect: 'none' }}>
+              Prob (%) {sortDir === 'asc' ? '▲' : '▼'}
+            </th>
           </tr>
         </thead>
         <tbody>
-          {data.map((row, i) => (
+          {sortedData.map((row, i) => (
             <tr key={i}>
               <td>{row.yes_sub_title}</td>
               <td>{row.price.toFixed(2)}</td>
@@ -55,6 +87,7 @@ function App() {
           ))}
         </tbody>
       </table>
+      )}
     </div>
   );
 }
