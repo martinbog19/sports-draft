@@ -226,7 +226,7 @@ try:
                 dt = datetime.fromisoformat(raw_ts).astimezone(timezone.utc)
                 created_str = dt.strftime("%b %d, %Y")
 
-            c_info, c_status, c_launch, c_edit, c_delete = st.columns([4, 2, 1, 1, 1])
+            c_info, c_status, c_launch, c_edit, c_delete, c_view = st.columns([4, 2, 1, 1, 1, 1])
 
             c_info.write(f"**{name}**  `{room['code']}`")
             detail_parts = [mode_str]
@@ -245,6 +245,9 @@ try:
                     st.session_state.editing_room = room
                 if c_delete.button("Delete", key=f"delete_{room['id']}", use_container_width=True):
                     st.session_state.deleting_room = room
+            if c_view.button("View", key=f"view_{room['id']}", use_container_width=True):
+                st.session_state.viewing_room = room
+                st.switch_page("pages/view.py")
 
 except Exception as e:
     st.warning(f"Could not load drafts — make sure the backend is running. [{e}]")
