@@ -1,6 +1,7 @@
+import os
 import requests
 
-BASE = "http://localhost:8000"
+BASE = os.getenv("BACKEND_URL", "http://localhost:8000")
 
 
 def create_room(user_id, host_name, draft_name, snake, rounds, mode, odds_provider=None, leagues=None):
