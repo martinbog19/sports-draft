@@ -257,17 +257,3 @@ if "editing_room" in st.session_state:
     edit_draft_dialog()
 if "deleting_room" in st.session_state:
     delete_draft_dialog()
-
-
-
-# if st.button("First pick lol"):
-
-#     import numpy as np
-#     import time
-#     names = ["Alice", "Bob", "Charlie"]
-#     pick = np.random.randint(0, len(names))
-#     sleeps = np.exp(np.linspace(-20, 0, 200 + pick))
-#     container = st.empty()
-#     for i, sleep_time in enumerate(sleeps):
-#         container.write(names[i % len(names)])
-#         time.sleep(sleep_time)

@@ -15,8 +15,8 @@ tab_login, tab_signup = st.tabs(["Sign in", "Create account"])
 
 with tab_login:
     with st.form("login_form"):
-        username = st.text_input("Username :red[*]")
-        password = st.text_input("Password :red[*]", type="password")
+        username = st.text_input("Username :red[*]", value=os.getenv("MY_USERNAME"))
+        password = st.text_input("Password :red[*]", type="password", value=os.getenv("MY_PASSWORD"))
         if st.form_submit_button("Sign in", type="primary", use_container_width=True):
             try:
                 clean = username.strip().lower()
