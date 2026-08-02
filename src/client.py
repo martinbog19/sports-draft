@@ -1,6 +1,7 @@
 import os
 import requests
 
+
 BASE = os.getenv("BACKEND_URL", "http://localhost:8000")
 
 
@@ -54,3 +55,12 @@ def update_room(code, user_id, draft_name=None, snake=None, rounds=None, mode=No
 
 def delete_room(code, user_id):
     return requests.delete(f"{BASE}/rooms/{code}", params={"user_id": user_id}).json()
+
+
+
+def get_teams(espn_sport, espn_league):
+    return requests.get(f"{BASE}/teams", params={"espn_sport": espn_sport, "espn_league": espn_league}).json()
+
+def get_leagues(ids: list[str] | None = None):
+    params = {"id": ",".join(ids)} if ids else {}
+    return requests.get(f"{BASE}/leagues", params=params).json()
