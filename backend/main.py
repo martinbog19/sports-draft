@@ -9,7 +9,7 @@ load_dotenv()
 app = FastAPI()
 db = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
 
-def random_code(n=6):
+def _random_code(n=6):
     return "".join(random.choices(string.ascii_uppercase + string.digits, k=n))
 
 @app.get("/health")
@@ -31,7 +31,7 @@ class CreateRoomRequest(BaseModel):
 
 @app.post("/rooms")
 def create_room(req: CreateRoomRequest):
-    code = random_code()
+    code = _random_code()
     room = db.table("rooms").insert({
         "code": code,
         "draft_name": req.draft_name,
@@ -171,8 +171,6 @@ def delete_room(code: str, user_id: str):
     return {"ok": True}
 
 
-### Endpoint 5 — Make a pick
-
 class PickRequest(BaseModel):
     player_name: str
     team: str
@@ -208,3 +206,28 @@ def make_pick(code: str, req: PickRequest):
         db.table("rooms").update({"status": "finished"}).eq("id", room["id"]).execute()
 
     return {"ok": True}
+
+
+@app.get("/teams")
+def get_teams(
+    espn_sport: str | None = None,
+    espn_league: str | None = None,
+):
+    query = db.table("teams").select("*").eq("is_active", True)
+
+    if espn_sport:
+        query = query.eq("espn_sport", espn_sport)
+    if espn_league:
+        query = query.eq("espn_league", espn_league)
+
+    teams = query.execute().data
+    return {"teams": teams}
+
+
+@app.get("/leagues")
+def get_leagues(id: str | None = None):
+    query = db.table("leagues").select("*").eq("is_active", True)
+    if id:
+        query = query.in_("id", id.split(","))
+    leagues = query.execute().data
+    return {"leagues": leagues}
