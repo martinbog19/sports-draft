@@ -9,7 +9,7 @@ load_dotenv()
 app = FastAPI()
 db = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
 
-def random_code(n=6):
+def _random_code(n=6):
     return "".join(random.choices(string.ascii_uppercase + string.digits, k=n))
 
 @app.get("/health")
@@ -31,7 +31,7 @@ class CreateRoomRequest(BaseModel):
 
 @app.post("/rooms")
 def create_room(req: CreateRoomRequest):
-    code = random_code()
+    code = _random_code()
     room = db.table("rooms").insert({
         "code": code,
         "draft_name": req.draft_name,
