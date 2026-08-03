@@ -29,10 +29,11 @@ def _get_espn_team_urls(espn_sport: str, espn_league: str) -> list[str]:
         page += 1
     return team_urls
 
-def _transform_team_payload(data: dict, espn_sport: str, espn_league: str) -> dict:
+def _transform_team_payload(data: dict, espn_sport: str, espn_league: str, league_id: str) -> dict:
     logos = data.get("logos") or []
     return {
         "id": data["uid"],
+        "league_id": league_id,
         "espn_id": data["id"],
         "espn_sport": espn_sport,
         "espn_league": espn_league,
@@ -66,7 +67,7 @@ for league in leagues:
             response = requests.get(url, timeout=TIMEOUT_SECONDS)
             response.raise_for_status()
             data = response.json()
-            transformed_team = _transform_team_payload(data, sport, league_name)
+            transformed_team = _transform_team_payload(data, sport, league_name, league_id)
             transformed_teams.append(transformed_team)
         except Exception as e:
             failed = True
