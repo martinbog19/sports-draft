@@ -57,9 +57,27 @@ def delete_room(code, user_id):
     return requests.delete(f"{BASE}/rooms/{code}", params={"user_id": user_id}).json()
 
 
+def start_draft(code, user_id):
+    return requests.post(f"{BASE}/rooms/{code}/start", json={"user_id": user_id}).json()
 
-def get_teams(espn_sport, espn_league):
-    return requests.get(f"{BASE}/teams", params={"espn_sport": espn_sport, "espn_league": espn_league}).json()
+
+
+def get_teams(
+        league_id: list[str] | None = None,
+        espn_sport: list[str] | None = None,
+        espn_league: list[str] | None = None,
+    ):
+    params = {}
+    if league_id:
+        params["league_id"] = ",".join(league_id)
+    if espn_sport:
+        params["espn_sport"] = ",".join(espn_sport)
+    if espn_league:
+        params["espn_league"] = ",".join(espn_league)
+    return requests.get(
+        f"{BASE}/teams",
+        params=params
+    ).json()
 
 def get_leagues(ids: list[str] | None = None):
     params = {"id": ",".join(ids)} if ids else {}

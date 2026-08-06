@@ -1,8 +1,9 @@
 import pandas as pd
 import streamlit as st
+from datetime import datetime, timezone
 
 from src.api import get_kalshi_data, get_polymarket_data
-from src.client import join_room, list_rooms, update_room, delete_room
+from src.client import join_room, list_rooms, update_room, delete_room, start_draft
 from src.config import KALSHI_LEAGUES, POLYMARKET_LEAGUES
 
 # ── Auth guard ─────────────────────────────────────────────────────────────────
@@ -22,8 +23,6 @@ with col_user:
     if st.button("Sign out", use_container_width=True):
         st.session_state.clear()
         st.switch_page("pages/login.py")
-
-st.divider()
 
 
 # ── Dialogs ────────────────────────────────────────────────────────────────────
@@ -133,41 +132,40 @@ if c2.button("Enter a code", use_container_width=True):
 
 # ── Dev shortcut ───────────────────────────────────────────────────────────────
 
-with st.expander("🚧 Dev tools"):
-    dev_provider = st.pills("Provider", ["Polymarket", "Kalshi"], default="Polymarket", key="dev_provider")
-    if st.button("Launch draft with live odds", use_container_width=True):
-        leagues = KALSHI_LEAGUES if dev_provider == "Kalshi" else POLYMARKET_LEAGUES
-        fetch_fn = get_kalshi_data if dev_provider == "Kalshi" else get_polymarket_data
-        with st.spinner(f"Fetching odds from {dev_provider}..."):
-            data = pd.DataFrame()
-            for league_name, slug in leagues.items():
-                try:
-                    df = fetch_fn(slug)
-                    df["league"] = league_name
-                    data = pd.concat([data, df], ignore_index=True)
-                except Exception:
-                    pass
-        data = data.sort_values("prob", ascending=False)
-        players = ["Alice", "Bob", "Charlie"]
-        st.session_state.players = players
-        st.session_state.snake = True
-        st.session_state.round = 1
-        st.session_state.pick = 0
-        st.session_state.rounds = 5
-        st.session_state.drafts = {p: [] for p in players}
-        st.session_state.mode = "Easy"
-        st.session_state.leagues = sorted(data["league"].unique().tolist())
-        st.session_state.data = data
-        st.switch_page("pages/draft.py")
+# with st.expander("🚧 Dev tools"):
+#     dev_provider = st.pills("Provider", ["Polymarket", "Kalshi"], default="Polymarket", key="dev_provider")
+#     if st.button("Launch draft with live odds", use_container_width=True):
+#         leagues = KALSHI_LEAGUES if dev_provider == "Kalshi" else POLYMARKET_LEAGUES
+#         fetch_fn = get_kalshi_data if dev_provider == "Kalshi" else get_polymarket_data
+#         with st.spinner(f"Fetching odds from {dev_provider}..."):
+#             data = pd.DataFrame()
+#             for league_name, slug in leagues.items():
+#                 try:
+#                     df = fetch_fn(slug)
+#                     df["league"] = league_name
+#                     data = pd.concat([data, df], ignore_index=True)
+#                 except Exception:
+#                     pass
+#         data = data.sort_values("prob", ascending=False)
+#         players = ["Alice", "Bob", "Charlie"]
+#         st.session_state.players = players
+#         st.session_state.snake = True
+#         st.session_state.round = 1
+#         st.session_state.pick = 0
+#         st.session_state.rounds = 5
+#         st.session_state.drafts = {p: [] for p in players}
+#         st.session_state.mode = "Easy"
+#         st.session_state.leagues = sorted(data["league"].unique().tolist())
+#         st.session_state.data = data
+#         st.switch_page("pages/draft.py")
 
 
 # ── My Drafts ──────────────────────────────────────────────────────────────────
 
-from datetime import datetime, timezone
-
 STATUS_ORDER = {"lobby": 0, "drafting": 1, "finished": 2}
 
 st.subheader("My drafts")
+st.space()
 
 try:
     data = list_rooms(st.session_state.user["id"])
@@ -176,25 +174,25 @@ try:
     if not rooms:
         st.caption("No drafts yet. Create one or join with a code.")
     else:
-        # ── Controls
-        fc, sc = st.columns([3, 2])
-        status_filter = fc.pills(
-            "Status", ["Lobby", "Drafting", "Finished"],
-            selection_mode="multi",
-            default=None,
-            label_visibility="collapsed",
-        )
-        sort_by = sc.selectbox(
-            "Sort", ["Newest first", "Oldest first", "Name A→Z", "Name Z→A"],
-            label_visibility="collapsed",
-        )
 
-        # ── Filter
+        # fc, sc = st.columns([3, 2])
+        # status_filter = fc.pills(
+        #     "Status", ["Lobby", "Drafting", "Finished"],
+        #     selection_mode="multi",
+        #     default=None,
+        #     label_visibility="collapsed",
+        # )
+        # sort_by = sc.selectbox(
+        #     "Sort", ["Newest first", "Oldest first", "Name A→Z", "Name Z→A"],
+        #     label_visibility="collapsed",
+        # )
+        status_filter = []
+        sort_by = "Newest first"
+
         if status_filter:
             active = [s.lower() for s in status_filter]
             rooms = [r for r in rooms if r["status"] in active]
 
-        # ── Sort
         def sort_key(r):
             if sort_by in ("Name A→Z", "Name Z→A"):
                 return (r.get("draft_name") or r["code"]).lower()
@@ -205,49 +203,56 @@ try:
             reverse=sort_by in ("Newest first", "Name Z→A"),
         )
 
-        # ── Rows
+        columns = st.columns(4)
+
         user_id = st.session_state.user["id"]
-        for room in rooms:
-            is_host = room.get("host_id") == user_id
-            name = room.get("draft_name") or room["code"]
-            status = room["status"]
+        for i, room in enumerate(rooms):
 
-            snake_str = "Snake" if room.get("snake", True) else "Linear"
-            rounds_str = f"{room.get('rounds', '?')} rounds"
-            mode_str = room.get("mode") or "—"
-            provider = room.get("odds_provider")
-            provider_str = provider if provider else ("" if mode_str == "Expert" else "—")
-            n_leagues = len(room.get("leagues") or [])
-            leagues_str = f"{n_leagues} league{'s' if n_leagues != 1 else ''}"
+            with columns[i % 4]:
+                container = st.container(border=True, height=220)
+                with container:
 
-            created_str = ""
-            raw_ts = room.get("created_at")
-            if raw_ts:
-                dt = datetime.fromisoformat(raw_ts).astimezone(timezone.utc)
-                created_str = dt.strftime("%b %d, %Y")
+                    is_host = room.get("host_id") == user_id
+                    name = room.get("draft_name") or room["code"]
+                    status = room["status"]
 
-            c_info, c_status, c_launch, c_edit, c_delete, c_view = st.columns([4, 2, 1, 1, 1, 1])
+                    snake_str = "Snake" if room.get("snake", True) else "Linear"
+                    rounds_str = f"{room.get('rounds', '?')} rounds"
+                    mode_str = room.get("mode") or "—"
+                    n_leagues = len(room.get("leagues") or [])
+                    leagues_str = f"{n_leagues} league{'s' if n_leagues != 1 else ''}"
 
-            c_info.write(f"**{name}**  `{room['code']}`")
-            detail_parts = [mode_str]
-            if provider_str:
-                detail_parts.append(provider_str)
-            detail_parts += [rounds_str, snake_str, leagues_str]
-            if created_str:
-                detail_parts.append(f"Created {created_str}")
-            c_info.caption(" · ".join(detail_parts))
+                    created_str = ""
+                    raw_ts = room.get("created_at")
+                    if raw_ts:
+                        dt = datetime.fromisoformat(raw_ts).astimezone(timezone.utc)
+                        created_str = dt.strftime("%b %d, %Y")
 
-            c_status.write(status.capitalize())
+                    # c_info, c_status, c_launch, c_edit, c_delete, c_view = st.columns([4, 2, 1, 1, 1, 1])
+                    with st.container(horizontal=True, horizontal_alignment="distribute", vertical_alignment="center"):
+                        st.write(f"**{name}**  `{room['code']}`")
+                        if is_host:
+                            if st.button("Edit", key=f"edit_{room['id']}", type="tertiary"):
+                                st.session_state.editing_room = room
+                            if st.button("Delete", key=f"delete_{room['id']}", type="tertiary"):
+                                st.session_state.deleting_room = room
 
-            c_launch.button("Launch", key=f"launch_{room['id']}", disabled=True, use_container_width=True)
-            if is_host:
-                if c_edit.button("Edit", key=f"edit_{room['id']}", use_container_width=True):
-                    st.session_state.editing_room = room
-                if c_delete.button("Delete", key=f"delete_{room['id']}", use_container_width=True):
-                    st.session_state.deleting_room = room
-            if c_view.button("View", key=f"view_{room['id']}", use_container_width=True):
-                st.session_state.viewing_room = room
-                st.switch_page("pages/view.py")
+                    detail_parts = [mode_str]
+                    detail_parts += [rounds_str, snake_str, leagues_str]
+                    st.caption(" · ".join(detail_parts))
+                    st.caption(created_str)
+
+                    with st.container(horizontal=True, horizontal_alignment="distribute", vertical_alignment="center"):
+
+                        st.write(status.capitalize())
+                        if is_host and status.lower() == "lobby":
+                            if st.button("Launch draft!", key=f"launch_{room['id']}", type="primary"):
+                                result = start_draft(room["code"], user_id)
+                                if "detail" in result:
+                                    st.error(result["detail"])
+                                else:
+                                    st.session_state.drafting_room = {**room, "status": "drafting"}
+                                    st.switch_page("pages/draft.py")
 
 except Exception as e:
     st.warning(f"Could not load drafts — make sure the backend is running. [{e}]")

@@ -84,17 +84,49 @@ def join_room(code: str, req: JoinRoomRequest):
     return {"room_id": room["id"], "seat": seat}
 
 
-# @app.post("/rooms/{code}/start")
-# def start_draft(code: str):
-#     room = db.table("rooms").select("*").eq("code", code).single().execute().data
+class StartDraftRequest(BaseModel):
+    user_id: str
 
-#     # fetch odds and write to pool table
-#     # (move your existing get_polymarket_data / get_kalshi_data logic here)
-#     pool_rows = fetch_odds_for_room(room)
-#     db.table("pool").insert(pool_rows).execute()
 
-#     db.table("rooms").update({"status": "drafting"}).eq("id", room["id"]).execute()
-#     return {"ok": True}
+@app.post("/rooms/{code}/start")
+def start_draft(code: str, req: StartDraftRequest):
+    room = db.table("rooms").select("*").eq("code", code).single().execute().data
+    if not room:
+        raise HTTPException(404, "Room not found")
+    if room["host_id"] != req.user_id:
+        raise HTTPException(403, "Only the host can start this draft")
+    if room["status"] != "lobby":
+        raise HTTPException(400, "Draft already started")
+
+    leagues = room.get("leagues") or []
+    if not leagues:
+        raise HTTPException(400, "No leagues selected for this draft")
+
+    teams = (
+        db.table("teams").select("*")
+        .eq("is_active", True)
+        .in_("league_id", leagues)
+        .execute().data
+    )
+    if not teams:
+        raise HTTPException(400, "No teams found for the selected leagues")
+
+    pool_rows = [
+        {
+            "room_id": room["id"],
+            "team_id": team["id"],
+            "display_name": team["display_name"],
+            "league_id": team["league_id"],
+            "logo_url": team.get("logo_url"),
+            "prob": None,
+            "is_drafted": False,
+        }
+        for team in teams
+    ]
+    db.table("pool").upsert(pool_rows, on_conflict="room_id,team_id").execute()
+
+    db.table("rooms").update({"status": "drafting"}).eq("id", room["id"]).execute()
+    return {"ok": True}
 
 
 ### Endpoint 4 — Get room state
@@ -210,15 +242,18 @@ def make_pick(code: str, req: PickRequest):
 
 @app.get("/teams")
 def get_teams(
+    league_id: str | None = None,
     espn_sport: str | None = None,
     espn_league: str | None = None,
 ):
     query = db.table("teams").select("*").eq("is_active", True)
 
+    if league_id:
+        query = query.in_("league_id", league_id.split(","))
     if espn_sport:
-        query = query.eq("espn_sport", espn_sport)
+        query = query.in_("espn_sport", espn_sport.split(","))
     if espn_league:
-        query = query.eq("espn_league", espn_league)
+        query = query.in_("espn_league", espn_league.split(","))
 
     teams = query.execute().data
     return {"teams": teams}

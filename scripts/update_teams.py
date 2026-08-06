@@ -12,14 +12,14 @@ TIMEOUT_SECONDS = 10
 
 load_dotenv()
 supabase = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
-leagues = supabase.table("leagues").select("id", "espn_sport, espn_league").eq("is_active", True).execute().data
+leagues = supabase.table("leagues").select("id", "espn_sport", "espn_league", "espn_season").eq("is_active", True).execute().data
 
-def _get_espn_team_urls(espn_sport: str, espn_league: str) -> list[str]:
+def _get_espn_team_urls(espn_sport: str, espn_league: str, espn_season: str) -> list[str]:
 
     team_urls = []
     page = 1
     while True:
-        url = f"http://sports.core.api.espn.com/v2/sports/{espn_sport}/leagues/{espn_league}/teams?page={page}"
+        url = f"http://sports.core.api.espn.com/v2/sports/{espn_sport}/leagues/{espn_league}/seasons/{espn_season}/teams?page={page}"
         response = requests.get(url, timeout=TIMEOUT_SECONDS)
         response.raise_for_status()
         data = response.json()
@@ -29,7 +29,7 @@ def _get_espn_team_urls(espn_sport: str, espn_league: str) -> list[str]:
         page += 1
     return team_urls
 
-def _transform_team_payload(data: dict, espn_sport: str, espn_league: str, league_id: str) -> dict:
+def _transform_team_payload(data: dict, espn_sport: str, espn_league: str, espn_season: str, league_id: str) -> dict:
     logos = data.get("logos") or []
     return {
         "id": data["uid"],
@@ -37,6 +37,7 @@ def _transform_team_payload(data: dict, espn_sport: str, espn_league: str, leagu
         "espn_id": data["id"],
         "espn_sport": espn_sport,
         "espn_league": espn_league,
+        "espn_season": espn_season,
         "display_name": data["displayName"],
         "short_display_name": data["shortDisplayName"],
         "location": data["location"],
@@ -51,9 +52,10 @@ for league in leagues:
     league_id = league["id"]
     sport = league["espn_sport"]
     league_name = league["espn_league"]
+    season = league["espn_season"]
     try:
-        print(f"Updating teams for {sport} - {league_name}")
-        team_urls = _get_espn_team_urls(sport, league_name)
+        print(f"Updating teams for {sport} - {league_name} - {season}")
+        team_urls = _get_espn_team_urls(sport, league_name, season)
         assert team_urls, f"No teams found for `{league_id}`"
     except Exception as e:
         failed = True
@@ -67,7 +69,7 @@ for league in leagues:
             response = requests.get(url, timeout=TIMEOUT_SECONDS)
             response.raise_for_status()
             data = response.json()
-            transformed_team = _transform_team_payload(data, sport, league_name, league_id)
+            transformed_team = _transform_team_payload(data, sport, league_name, season, league_id)
             transformed_teams.append(transformed_team)
         except Exception as e:
             failed = True
