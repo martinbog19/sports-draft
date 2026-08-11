@@ -58,7 +58,3 @@ st.write(room)
 #    non-active player's screen won't auto-update when someone else picks.
 #    Need either st.autorefresh (poll get_room every few seconds) or a
 #    manual "Refresh" button until something push-based is wired up.
-#
-# NOTE: backend/main.py's make_pick endpoint still targets the OLD pool
-# schema (pool.team / pool.league / pool.prob) — it needs to be rewritten
-# for team_id + is_drafted before step 5 can work against the current table.

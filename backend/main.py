@@ -204,40 +204,58 @@ def delete_room(code: str, user_id: str):
 
 
 class PickRequest(BaseModel):
-    player_name: str
-    team: str
-    league: str
-    round: int
-    pick_number: int
+    user_id: str
+    team_id: str
 
 @app.post("/rooms/{code}/pick")
 def make_pick(code: str, req: PickRequest):
     room = db.table("rooms").select("*").eq("code", code).single().execute().data
+    if not room:
+        raise HTTPException(404, "Room not found")
     if room["status"] != "drafting":
         raise HTTPException(400, "Draft not in progress")
 
-    # get prob at time of pick
-    pool_entry = db.table("pool").select("prob").eq("room_id", room["id"]).eq("team", req.team).single().execute().data
+    players = db.table("room_players").select("*").eq("room_id", room["id"]).order("seat").execute().data
+    picks = db.table("picks").select("*").eq("room_id", room["id"]).order("pick_number").execute().data
+
+    n = len(players)
+    pick_number = len(picks) + 1
+    round_num = (pick_number - 1) // n + 1
+    seat_in_round = (pick_number - 1) % n
+    if room["snake"] and round_num % 2 == 0:
+        seat_in_round = n - 1 - seat_in_round
+    current_player = players[seat_in_round]
+
+    if current_player["user_id"] != req.user_id:
+        raise HTTPException(403, "It's not your turn")
+
+    pool_entry = (
+        db.table("pool").select("*")
+        .eq("room_id", room["id"]).eq("team_id", req.team_id)
+        .single().execute().data
+    )
+    if not pool_entry:
+        raise HTTPException(404, "Team not in this draft's pool")
+    if pool_entry["is_drafted"]:
+        raise HTTPException(400, "Team already drafted")
 
     db.table("picks").insert({
         "room_id": room["id"],
-        "display_name": req.player_name,
-        "team": req.team,
-        "league": req.league,
-        "prob_at_pick": pool_entry["prob"] if pool_entry else None,
-        "round": req.round,
-        "pick_number": req.pick_number
+        "user_id": req.user_id,
+        "display_name": current_player["display_name"],
+        "team": pool_entry["display_name"],
+        "league": pool_entry["league_id"],
+        "prob_at_pick": pool_entry["prob"],
+        "round": round_num,
+        "pick_number": pick_number,
     }).execute()
 
-    # check if draft is finished
-    players = db.table("room_players").select("*").eq("room_id", room["id"]).execute().data
-    total_picks = room["rounds"] * len(players)
-    picks_made = db.table("picks").select("id", count="exact").eq("room_id", room["id"]).execute().count
+    db.table("pool").update({"is_drafted": True}).eq("id", pool_entry["id"]).execute()
 
-    if picks_made >= total_picks:
+    if pick_number >= room["rounds"] * n:
         db.table("rooms").update({"status": "finished"}).eq("id", room["id"]).execute()
 
-    return {"ok": True}
+    return {"ok": True, "round": round_num, "pick_number": pick_number}
 
 
 @app.get("/teams")
