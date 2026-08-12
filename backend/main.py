@@ -131,12 +131,15 @@ def start_draft(code: str, req: StartDraftRequest):
 
 ### Endpoint 4 — Get room state
 
-@app.get("/rooms/{code}")
-def get_room(code: str):
-    room = db.table("rooms").select("*").eq("code", code).single().execute().data
+@app.get("/rooms/{room_id}")
+def get_room(room_id: str, hide_drafted: bool = False):
+    room = db.table("rooms").select("*").eq("id", room_id).single().execute().data
     players = db.table("room_players").select("*").eq("room_id", room["id"]).order("seat").execute().data
     picks = db.table("picks").select("*").eq("room_id", room["id"]).order("pick_number").execute().data
-    pool = db.table("pool").select("*").eq("room_id", room["id"]).execute().data
+    pool_query = db.table("pool").select("*").eq("room_id", room["id"])
+    if hide_drafted:
+        pool_query = pool_query.eq("is_drafted", False)
+    pool = pool_query.execute().data
     return {"room": room, "players": players, "picks": picks, "pool": pool}
 
 
@@ -148,6 +151,15 @@ def list_rooms(user_id: str):
         return {"rooms": []}
     rooms = db.table("rooms").select("*").in_("id", room_ids).execute().data
     return {"rooms": rooms}
+
+
+@app.get("/rooms/{code}/players")
+def room_players(code: str):
+    room = db.table("rooms").select("*").eq("code", code).single().execute().data
+    if not room:
+        raise HTTPException(404, "Room not found")
+    players = db.table("room_players").select("*").eq("room_id", room["id"]).order("seat").execute().data
+    return {"players": players}
 
 
 class UpdateRoomRequest(BaseModel):
@@ -205,38 +217,48 @@ def delete_room(code: str, user_id: str):
 
 class PickRequest(BaseModel):
     player_name: str
+    user_id: str
     team: str
     league: str
     round: int
     pick_number: int
 
-@app.post("/rooms/{code}/pick")
-def make_pick(code: str, req: PickRequest):
-    room = db.table("rooms").select("*").eq("code", code).single().execute().data
-    if room["status"] != "drafting":
-        raise HTTPException(400, "Draft not in progress")
+@app.post("/rooms/{room_id}/pick")
+def make_pick(room_id: str, req: PickRequest):
+    # room = db.table("rooms").select("*").eq("id", room_id).single().execute().data
+    # if room["status"] != "drafting":
+    #     raise HTTPException(400, "Draft not in progress")
 
     # get prob at time of pick
-    pool_entry = db.table("pool").select("prob").eq("room_id", room["id"]).eq("team", req.team).single().execute().data
+    # pool_entry = db.table("pool").select("prob").eq("room_id", room["id"]).eq("team", req.team).single().execute().data
 
     db.table("picks").insert({
-        "room_id": room["id"],
+        "room_id": room_id,
+        "user_id": req.user_id,
         "display_name": req.player_name,
         "team": req.team,
         "league": req.league,
-        "prob_at_pick": pool_entry["prob"] if pool_entry else None,
+        "prob_at_pick": None,
         "round": req.round,
         "pick_number": req.pick_number
     }).execute()
 
-    # check if draft is finished
-    players = db.table("room_players").select("*").eq("room_id", room["id"]).execute().data
-    total_picks = room["rounds"] * len(players)
-    picks_made = db.table("picks").select("id", count="exact").eq("room_id", room["id"]).execute().count
+    db.table("pool").update({"is_drafted": True}).eq("room_id", room_id).eq("team_id", req.team).execute()
 
-    if picks_made >= total_picks:
-        db.table("rooms").update({"status": "finished"}).eq("id", room["id"]).execute()
+    # # check if draft is finished
+    # players = db.table("room_players").select("*").eq("room_id", room["id"]).execute().data
+    # total_picks = room["rounds"] * len(players)
+    # picks_made = db.table("picks").select("id", count="exact").eq("room_id", room["id"]).execute().count
 
+    # if picks_made >= total_picks:
+    #     db.table("rooms").update({"status": "finished"}).eq("id", room["id"]).execute()
+
+    return {"ok": True}
+
+
+@app.post("/rooms/{room_id}/terminate")
+def terminate_draft(room_id: str):
+    db.table("rooms").update({"status": "finished"}).eq("id", room_id).execute()
     return {"ok": True}
 
 
@@ -266,3 +288,9 @@ def get_leagues(id: str | None = None):
         query = query.in_("id", id.split(","))
     leagues = query.execute().data
     return {"leagues": leagues}
+
+
+@app.get("/rooms/{room_id}/pool")
+def get_room_pool(room_id: str):
+    pool = db.table("pool").select("*").eq("room_id", room_id).execute().data
+    return {"pool": pool}
