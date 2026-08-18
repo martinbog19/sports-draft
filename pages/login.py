@@ -60,19 +60,23 @@ with tab_signup:
                     clean = new_username.strip().lower()
                     email = new_email.strip().lower()
                     display_name = new_name.strip() or clean
-                    response = supabase.auth.sign_up({"email": email, "password": new_password})
-                    supabase.table("profiles").insert({
-                        "user_id": response.user.id,
-                        "username": clean,
-                        "display_name": display_name,
+                    # response = supabase.auth.sign_up({"email": email, "password": new_password})
+                    response = supabase.auth.sign_up({
                         "email": email,
-                    }).execute()
-                    st.session_state.user = {
-                        "id": response.user.id,
-                        "username": clean,
-                        "display_name": display_name,
-                        "email": email,
-                    }
+                        "password": new_password,
+                        "options": {
+                            "data": {
+                                "username": clean,
+                                "display_name": display_name,
+                            }
+                        }
+                    })
+                    # st.session_state.user = {
+                    #     "id": response.user.id,
+                    #     "username": clean,
+                    #     "display_name": display_name,
+                    #     "email": email,
+                    # }
                     st.session_state.access_token = response.session.access_token
                     st.switch_page("pages/home.py")
                 except Exception as e:
