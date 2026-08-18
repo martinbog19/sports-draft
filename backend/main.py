@@ -253,7 +253,7 @@ def make_pick(room_id: str, req: PickRequest):
     # if picks_made >= total_picks:
     #     db.table("rooms").update({"status": "finished"}).eq("id", room["id"]).execute()
 
-    return {"ok": True, "round": round_num, "pick_number": pick_number}
+    return {"ok": True, "round": req.round, "pick_number": req.pick_number}
 
 
 @app.post("/rooms/{room_id}/terminate")

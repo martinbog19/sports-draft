@@ -94,7 +94,7 @@ def get_room_pool(room_id):
     return requests.get(f"{BASE}/rooms/{room_id}/pool").json()
 
 
-def make_pick(room_id, user_id, player_name, team, league, round, pick_number):
+def make_pick(room_id, user_id, player_name, team, league, round_num, pick_number):
     return requests.post(
         f"{BASE}/rooms/{room_id}/pick",
         json={
@@ -102,7 +102,7 @@ def make_pick(room_id, user_id, player_name, team, league, round, pick_number):
             "player_name": player_name,
             "team": team,
             "league": league,
-            "round": round,
+            "round": round_num,
             "pick_number": pick_number
         }
     ).json()
