@@ -262,6 +262,11 @@ try:
                                 st.session_state.results_room = room["id"]
                                 st.switch_page("pages/results.py")
 
+                        if status.lower() == "drafting":
+                            if st.button("Open draft", key=f"open_{room['id']}", type="primary"):
+                                st.session_state.drafting_room = room
+                                st.switch_page("pages/draft.py")
+
 except Exception as e:
     st.warning(f"Could not load drafts — make sure the backend is running. [{e}]")
 

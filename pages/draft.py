@@ -58,7 +58,7 @@ for team in pool:
                     player_name=st.session_state.user["display_name"],
                     team=team["team_id"],
                     league=team["league_id"],
-                    round=round_num,
+                    round_num=round_num,
                     pick_number=pick_number,
                 )
 
