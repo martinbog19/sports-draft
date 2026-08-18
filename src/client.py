@@ -1,3 +1,4 @@
+import code
 import os
 import requests
 
@@ -28,8 +29,13 @@ def join_room(user_id, code, display_name):
     ).json()
 
 
-def get_room(code):
-    return requests.get(f"{BASE}/rooms/{code}").json()
+def get_room(room_id: str, hide_drafted: bool = False):
+    params = {"hide_drafted": hide_drafted} if hide_drafted else {}
+    return requests.get(f"{BASE}/rooms/{room_id}", params=params).json()
+
+
+def get_room_players(code):
+    return requests.get(f"{BASE}/rooms/{code}/players").json()
 
 
 def list_rooms(user_id):
@@ -61,7 +67,6 @@ def start_draft(code, user_id):
     return requests.post(f"{BASE}/rooms/{code}/start", json={"user_id": user_id}).json()
 
 
-
 def get_teams(
         league_id: list[str] | None = None,
         espn_sport: list[str] | None = None,
@@ -79,6 +84,28 @@ def get_teams(
         params=params
     ).json()
 
+
 def get_leagues(ids: list[str] | None = None):
     params = {"id": ",".join(ids)} if ids else {}
     return requests.get(f"{BASE}/leagues", params=params).json()
+
+
+def get_room_pool(room_id):
+    return requests.get(f"{BASE}/rooms/{room_id}/pool").json()
+
+
+def make_pick(room_id, user_id, player_name, team, league, round, pick_number):
+    return requests.post(
+        f"{BASE}/rooms/{room_id}/pick",
+        json={
+            "user_id": user_id,
+            "player_name": player_name,
+            "team": team,
+            "league": league,
+            "round": round,
+            "pick_number": pick_number
+        }
+    ).json()
+
+def terminate_draft(room_id):
+    return requests.post(f"{BASE}/rooms/{room_id}/terminate").json()

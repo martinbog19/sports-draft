@@ -3,8 +3,7 @@ import streamlit as st
 from datetime import datetime, timezone
 
 from src.api import get_kalshi_data, get_polymarket_data
-from src.client import join_room, list_rooms, update_room, delete_room, start_draft
-from src.config import KALSHI_LEAGUES, POLYMARKET_LEAGUES
+from src.client import join_room, list_rooms, update_room, delete_room, start_draft, get_room_players, get_leagues
 
 # ── Auth guard ─────────────────────────────────────────────────────────────────
 
@@ -70,13 +69,12 @@ def edit_draft_dialog():
     else:
         odds_provider = None
 
-    league_options = KALSHI_LEAGUES if odds_provider == "Kalshi" else POLYMARKET_LEAGUES
-
     st.caption("Leagues:")
+    leagues = get_leagues()["leagues"]
     with st.container(height=100):
         selected_leagues = [
-            league for league in league_options
-            if st.toggle(league, value=(league in current_leagues), key=f"edit_league_{league}")
+            league["id"] for league in leagues
+            if st.toggle(league["display_name"], value=(league["id"] in current_leagues), key=f"league_{league['id']}")
         ]
 
     changed = (
@@ -107,18 +105,19 @@ def edit_draft_dialog():
 @st.dialog("Delete draft")
 def delete_draft_dialog():
     room = st.session_state.deleting_room
+    del st.session_state.deleting_room
     name = room.get("draft_name") or room["code"]
     st.warning(f"Delete **{name}**? This cannot be undone.")
     c1, c2 = st.columns(2)
     if c1.button("Cancel", use_container_width=True):
-        del st.session_state.deleting_room
+        # del st.session_state.deleting_room
         st.rerun()
     if c2.button("Delete", type="primary", use_container_width=True):
         result = delete_room(room["code"], st.session_state.user["id"])
         if "detail" in result:
             st.error(result["detail"])
         else:
-            del st.session_state.deleting_room
+            # del st.session_state.deleting_room
             st.rerun()
 
 
@@ -208,6 +207,9 @@ try:
         user_id = st.session_state.user["id"]
         for i, room in enumerate(rooms):
 
+            room_players = get_room_players(room["code"]).get("players", [])
+            # players = [p["display_name"] for p in room_players]
+
             with columns[i % 4]:
                 container = st.container(border=True, height=220)
                 with container:
@@ -232,15 +234,16 @@ try:
                     with st.container(horizontal=True, horizontal_alignment="distribute", vertical_alignment="center"):
                         st.write(f"**{name}**  `{room['code']}`")
                         if is_host:
-                            if st.button("Edit", key=f"edit_{room['id']}", type="tertiary"):
-                                st.session_state.editing_room = room
-                            if st.button("Delete", key=f"delete_{room['id']}", type="tertiary"):
+                            if status.lower() == "lobby":
+                                if st.button("Edit", key=f"edit_{room['id']}", type="tertiary"):
+                                    st.session_state.editing_room = room
+                            if st.button("🗑️", key=f"delete_{room['id']}", type="tertiary"):
                                 st.session_state.deleting_room = room
 
                     detail_parts = [mode_str]
                     detail_parts += [rounds_str, snake_str, leagues_str]
                     st.caption(" · ".join(detail_parts))
-                    st.caption(created_str)
+                    st.caption(created_str + " · " + str(len(room_players)) + " player" + ("s" if len(room_players) != 1 else ""))
 
                     with st.container(horizontal=True, horizontal_alignment="distribute", vertical_alignment="center"):
 
@@ -254,11 +257,18 @@ try:
                                     st.session_state.drafting_room = {**room, "status": "drafting"}
                                     st.switch_page("pages/draft.py")
 
+                        if status.lower() == "finished":
+                            if st.button("View results", key=f"results_{room['id']}", type="primary"):
+                                st.session_state.results_room = room["id"]
+                                st.switch_page("pages/results.py")
+
 except Exception as e:
     st.warning(f"Could not load drafts — make sure the backend is running. [{e}]")
 
 # Open dialogs if triggered from the list above
 if "editing_room" in st.session_state:
     edit_draft_dialog()
+    # del st.session_state.editing_room
 if "deleting_room" in st.session_state:
     delete_draft_dialog()
+    # del st.session_state.deleting_room

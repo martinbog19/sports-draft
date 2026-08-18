@@ -43,7 +43,7 @@ st.caption("Select leagues available in the draft:")
 with st.container(height=200):
     selected_leagues = [
         league["id"] for _, league in leagues.iterrows()
-        if st.toggle(league["display_name"], value=True, key=f"league_{league['id']}")
+        if st.toggle(league["display_name"], value=False, key=f"league_{league['id']}")
     ]
 
 st.divider()
