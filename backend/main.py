@@ -7,6 +7,8 @@ from typing import Optional
 import httpx
 import os, random, string, time
 
+from src.api import get_polymarket_data
+
 load_dotenv()
 app = FastAPI()
 
@@ -111,6 +113,40 @@ class StartDraftRequest(BaseModel):
     user_id: str
 
 
+def _fetch_odds(league_ids: list[str]) -> dict:
+    """Fetch Polymarket odds for each league, keyed by (league_id, normalized team name).
+    Best-effort: a league with no slug, or a failed fetch, is silently skipped rather than
+    blocking the draft from starting.
+    """
+    league_rows = execute(
+        db.table("leagues").select("id,polymarket_slug").in_("id", league_ids)
+    ).data
+
+    probs_by_team = {}
+    for league in league_rows:
+        slug = league.get("polymarket_slug")
+        if not slug:
+            continue
+        try:
+            df = get_polymarket_data(slug)
+        except Exception:
+            continue
+        for _, row in df.iterrows():
+            key = (league["id"], row["team"].strip().casefold())
+            probs_by_team[key] = float(row["prob"])
+    return probs_by_team
+
+
+def _match_prob(team: dict, probs_by_team: dict) -> Optional[float]:
+    for name in (team.get("display_name"), team.get("short_display_name"), team.get("location")):
+        if not name:
+            continue
+        prob = probs_by_team.get((team["league_id"], name.strip().casefold()))
+        if prob is not None:
+            return prob
+    return None
+
+
 @app.post("/rooms/{code}/start")
 def start_draft(code: str, req: StartDraftRequest):
     room = execute(db.table("rooms").select("*").eq("code", code).single()).data
@@ -133,6 +169,8 @@ def start_draft(code: str, req: StartDraftRequest):
     if not teams:
         raise HTTPException(400, "No teams found for the selected leagues")
 
+    probs_by_team = _fetch_odds(leagues)
+
     pool_rows = [
         {
             "room_id": room["id"],
@@ -140,7 +178,7 @@ def start_draft(code: str, req: StartDraftRequest):
             "display_name": team["display_name"],
             "league_id": team["league_id"],
             "logo_url": team.get("logo_url"),
-            "prob": None,
+            "prob": _match_prob(team, probs_by_team),
             "is_drafted": False,
         }
         for team in teams

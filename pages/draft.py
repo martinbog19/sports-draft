@@ -11,9 +11,6 @@ room_state = get_room(room["id"])
 room, players, picks, pool = room_state["room"], room_state["players"], room_state["picks"], room_state["pool"]
 
 players.sort(key=lambda x: x["seat"])
-pool.sort(key=lambda x: x["display_name"])
-
-st.write(room_state)
 
 n = len(players)
 pick_number = len(picks) + 1
@@ -29,27 +26,45 @@ st.write(f"Round {round_num} • Pick {pick_number} of {n * room['rounds']} • 
 
 my_turn = current_player["user_id"] == st.session_state.user["id"]
 
-selected_league = st.selectbox(
-    "Filter by league",
-    options=["All"] + sorted(set(team["league_id"] for team in pool)),
-    index=0,
-    disabled=True,
-)
+
+settings = st.columns([1, 1, 1, 2])
+with settings[0]:
+    sort_by = st.selectbox(
+        "Sort by",
+        options=["Probability", "Team name"],
+        index=0,
+    )
+with settings[1]:
+    league_list = sorted(set(team["league_id"] for team in pool))
+    selected_leagues = st.pills(
+        "Filter by league",
+        options=league_list,
+        selection_mode="multi",
+    )
+    selected_leagues = league_list if not selected_leagues else selected_leagues
+
+if sort_by == "Probability":
+    pool.sort(key=lambda x: (x["prob"] is None, -(x["prob"] or 0), x["display_name"]))
+elif sort_by == "Team name":
+    pool.sort(key=lambda x: x["display_name"])
 
 cols = st.columns([3, 2])
 for team in pool:
     if team["is_drafted"]:
         continue
-    if selected_league != "All" and team["league_id"] != selected_league:
+    if team["league_id"] not in selected_leagues:
         continue
     with cols[0]:
-        with st.container(horizontal=True, vertical_alignment="center", border=True, gap="xxsmall"):
+        with st.container(horizontal=True, vertical_alignment="top", border=True, gap="xxsmall", height=60):
 
             st.space()
-            st.image(team["logo_url"], width=40)
+            st.image(team["logo_url"], width=25)
             st.space("xxsmall")
             st.write(team["display_name"])
             st.caption(team["league_id"].upper())
+            
+            st.write(f"{team['prob']:.1f}%" if team["prob"] is not None else "—")
+            st.space("large")
 
             if st.button("Draft", key=f"draft_{team['team_id']}", type="primary", disabled=not my_turn):
                 make_pick(
