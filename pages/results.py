@@ -19,5 +19,5 @@ pool = pd.DataFrame(pool)
 # st.dataframe(pool)
 
 st.dataframe(picks.merge(pool, left_on="team", right_on="team_id", how="left")[
-    ["pick_number", "round", "display_name_y", "display_name_x", "league_id"]
+    ["pick_number", "round", "display_name_y", "display_name_x", "league_id", "prob"]
 ])
