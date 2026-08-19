@@ -1,20 +1,43 @@
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from supabase import create_client
 from pydantic import BaseModel
 from dotenv import load_dotenv
 from typing import Optional
-import os, random, string
+import httpx
+import os, random, string, time
 
 load_dotenv()
 app = FastAPI()
+
+FRONTEND_ORIGINS = os.getenv("FRONTEND_ORIGINS", "http://localhost:5173").split(",")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=FRONTEND_ORIGINS,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 db = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
 
 def _random_code(n=6):
     return "".join(random.choices(string.ascii_uppercase + string.digits, k=n))
 
+
+def execute(query, retries: int = 2, backoff: float = 0.5):
+    """Run a Supabase query, retrying on transient connection errors."""
+    for attempt in range(retries + 1):
+        try:
+            return query.execute()
+        except httpx.TransportError:
+            if attempt == retries:
+                raise
+            time.sleep(backoff * (attempt + 1))
+
+
 @app.get("/health")
 def health():
-      result = db.table("rooms").select("id").limit(1).execute()
+      result = execute(db.table("rooms").select("id").limit(1))
       return {"supabase": "connected", "data": result.data}
 
 
@@ -32,7 +55,7 @@ class CreateRoomRequest(BaseModel):
 @app.post("/rooms")
 def create_room(req: CreateRoomRequest):
     code = _random_code()
-    room = db.table("rooms").insert({
+    room = execute(db.table("rooms").insert({
         "code": code,
         "draft_name": req.draft_name,
         "host_id": req.user_id,
@@ -42,14 +65,14 @@ def create_room(req: CreateRoomRequest):
         "odds_provider": req.odds_provider,
         "leagues": req.leagues,
         "status": "lobby"
-    }).execute().data[0]
+    })).data[0]
 
-    db.table("room_players").insert({
+    execute(db.table("room_players").insert({
         "room_id": room["id"],
         "user_id": req.user_id,
         "display_name": req.host_name,
         "seat": 0
-    }).execute()
+    }))
 
     return {"code": code, "room_id": room["id"]}
 
@@ -61,25 +84,25 @@ class JoinRoomRequest(BaseModel):
 
 @app.post("/rooms/{code}/join")
 def join_room(code: str, req: JoinRoomRequest):
-    room = db.table("rooms").select("*").eq("code", code).single().execute().data
+    room = execute(db.table("rooms").select("*").eq("code", code).single()).data
     if not room:
         raise HTTPException(404, "Room not found")
     if room["status"] != "lobby":
         raise HTTPException(400, "Draft already started")
 
-    players = db.table("room_players").select("*").eq("room_id", room["id"]).execute().data
+    players = execute(db.table("room_players").select("*").eq("room_id", room["id"])).data
 
     if any(p["user_id"] == req.user_id for p in players):
         raise HTTPException(400, "You're already in this draft")
 
     seat = len(players)
 
-    db.table("room_players").insert({
+    execute(db.table("room_players").insert({
         "room_id": room["id"],
         "user_id": req.user_id,
         "display_name": req.display_name,
         "seat": seat
-    }).execute()
+    }))
 
     return {"room_id": room["id"], "seat": seat}
 
@@ -90,7 +113,7 @@ class StartDraftRequest(BaseModel):
 
 @app.post("/rooms/{code}/start")
 def start_draft(code: str, req: StartDraftRequest):
-    room = db.table("rooms").select("*").eq("code", code).single().execute().data
+    room = execute(db.table("rooms").select("*").eq("code", code).single()).data
     if not room:
         raise HTTPException(404, "Room not found")
     if room["host_id"] != req.user_id:
@@ -102,12 +125,11 @@ def start_draft(code: str, req: StartDraftRequest):
     if not leagues:
         raise HTTPException(400, "No leagues selected for this draft")
 
-    teams = (
+    teams = execute(
         db.table("teams").select("*")
         .eq("is_active", True)
         .in_("league_id", leagues)
-        .execute().data
-    )
+    ).data
     if not teams:
         raise HTTPException(400, "No teams found for the selected leagues")
 
@@ -123,9 +145,9 @@ def start_draft(code: str, req: StartDraftRequest):
         }
         for team in teams
     ]
-    db.table("pool").upsert(pool_rows, on_conflict="room_id,team_id").execute()
+    execute(db.table("pool").upsert(pool_rows, on_conflict="room_id,team_id"))
 
-    db.table("rooms").update({"status": "drafting"}).eq("id", room["id"]).execute()
+    execute(db.table("rooms").update({"status": "drafting"}).eq("id", room["id"]))
     return {"ok": True}
 
 
@@ -133,32 +155,32 @@ def start_draft(code: str, req: StartDraftRequest):
 
 @app.get("/rooms/{room_id}")
 def get_room(room_id: str, hide_drafted: bool = False):
-    room = db.table("rooms").select("*").eq("id", room_id).single().execute().data
-    players = db.table("room_players").select("*").eq("room_id", room["id"]).order("seat").execute().data
-    picks = db.table("picks").select("*").eq("room_id", room["id"]).order("pick_number").execute().data
+    room = execute(db.table("rooms").select("*").eq("id", room_id).single()).data
+    players = execute(db.table("room_players").select("*").eq("room_id", room["id"]).order("seat")).data
+    picks = execute(db.table("picks").select("*").eq("room_id", room["id"]).order("pick_number")).data
     pool_query = db.table("pool").select("*").eq("room_id", room["id"])
     if hide_drafted:
         pool_query = pool_query.eq("is_drafted", False)
-    pool = pool_query.execute().data
+    pool = execute(pool_query).data
     return {"room": room, "players": players, "picks": picks, "pool": pool}
 
 
 @app.get("/rooms")
 def list_rooms(user_id: str):
-    memberships = db.table("room_players").select("room_id").eq("user_id", user_id).execute().data
+    memberships = execute(db.table("room_players").select("room_id").eq("user_id", user_id)).data
     room_ids = [m["room_id"] for m in memberships]
     if not room_ids:
         return {"rooms": []}
-    rooms = db.table("rooms").select("*").in_("id", room_ids).execute().data
+    rooms = execute(db.table("rooms").select("*").in_("id", room_ids)).data
     return {"rooms": rooms}
 
 
 @app.get("/rooms/{code}/players")
 def room_players(code: str):
-    room = db.table("rooms").select("*").eq("code", code).single().execute().data
+    room = execute(db.table("rooms").select("*").eq("code", code).single()).data
     if not room:
         raise HTTPException(404, "Room not found")
-    players = db.table("room_players").select("*").eq("room_id", room["id"]).order("seat").execute().data
+    players = execute(db.table("room_players").select("*").eq("room_id", room["id"]).order("seat")).data
     return {"players": players}
 
 
@@ -174,7 +196,7 @@ class UpdateRoomRequest(BaseModel):
 
 @app.put("/rooms/{code}")
 def update_room(code: str, req: UpdateRoomRequest):
-    room = db.table("rooms").select("*").eq("code", code).single().execute().data
+    room = execute(db.table("rooms").select("*").eq("code", code).single()).data
     if not room:
         raise HTTPException(404, "Room not found")
     if room["host_id"] != req.user_id:
@@ -193,7 +215,7 @@ def update_room(code: str, req: UpdateRoomRequest):
 
     if updates:
         try:
-            db.table("rooms").update(updates).eq("id", room["id"]).execute()
+            execute(db.table("rooms").update(updates).eq("id", room["id"]))
         except Exception as e:
             raise HTTPException(500, f"Database error: {e}")
     return {"ok": True}
@@ -201,17 +223,17 @@ def update_room(code: str, req: UpdateRoomRequest):
 
 @app.delete("/rooms/{code}")
 def delete_room(code: str, user_id: str):
-    room = db.table("rooms").select("*").eq("code", code).single().execute().data
+    room = execute(db.table("rooms").select("*").eq("code", code).single()).data
     if not room:
         raise HTTPException(404, "Room not found")
     if room["host_id"] != user_id:
         raise HTTPException(403, "Only the host can delete this draft")
 
     rid = room["id"]
-    db.table("picks").delete().eq("room_id", rid).execute()
-    db.table("pool").delete().eq("room_id", rid).execute()
-    db.table("room_players").delete().eq("room_id", rid).execute()
-    db.table("rooms").delete().eq("id", rid).execute()
+    execute(db.table("picks").delete().eq("room_id", rid))
+    execute(db.table("pool").delete().eq("room_id", rid))
+    execute(db.table("room_players").delete().eq("room_id", rid))
+    execute(db.table("rooms").delete().eq("id", rid))
     return {"ok": True}
 
 
@@ -225,14 +247,14 @@ class PickRequest(BaseModel):
 
 @app.post("/rooms/{room_id}/pick")
 def make_pick(room_id: str, req: PickRequest):
-    # room = db.table("rooms").select("*").eq("id", room_id).single().execute().data
+    # room = execute(db.table("rooms").select("*").eq("id", room_id).single()).data
     # if room["status"] != "drafting":
     #     raise HTTPException(400, "Draft not in progress")
 
     # get prob at time of pick
-    # pool_entry = db.table("pool").select("prob").eq("room_id", room["id"]).eq("team", req.team).single().execute().data
+    # pool_entry = execute(db.table("pool").select("prob").eq("room_id", room["id"]).eq("team", req.team).single()).data
 
-    db.table("picks").insert({
+    execute(db.table("picks").insert({
         "room_id": room_id,
         "user_id": req.user_id,
         "display_name": req.player_name,
@@ -241,24 +263,24 @@ def make_pick(room_id: str, req: PickRequest):
         "prob_at_pick": None,
         "round": req.round,
         "pick_number": req.pick_number
-    }).execute()
+    }))
 
-    db.table("pool").update({"is_drafted": True}).eq("room_id", room_id).eq("team_id", req.team).execute()
+    execute(db.table("pool").update({"is_drafted": True}).eq("room_id", room_id).eq("team_id", req.team))
 
     # # check if draft is finished
-    # players = db.table("room_players").select("*").eq("room_id", room["id"]).execute().data
+    # players = execute(db.table("room_players").select("*").eq("room_id", room["id"])).data
     # total_picks = room["rounds"] * len(players)
-    # picks_made = db.table("picks").select("id", count="exact").eq("room_id", room["id"]).execute().count
+    # picks_made = execute(db.table("picks").select("id", count="exact").eq("room_id", room["id"])).count
 
     # if picks_made >= total_picks:
-    #     db.table("rooms").update({"status": "finished"}).eq("id", room["id"]).execute()
+    #     execute(db.table("rooms").update({"status": "finished"}).eq("id", room["id"]))
 
     return {"ok": True, "round": req.round, "pick_number": req.pick_number}
 
 
 @app.post("/rooms/{room_id}/terminate")
 def terminate_draft(room_id: str):
-    db.table("rooms").update({"status": "finished"}).eq("id", room_id).execute()
+    execute(db.table("rooms").update({"status": "finished"}).eq("id", room_id))
     return {"ok": True}
 
 
@@ -277,7 +299,7 @@ def get_teams(
     if espn_league:
         query = query.in_("espn_league", espn_league.split(","))
 
-    teams = query.execute().data
+    teams = execute(query).data
     return {"teams": teams}
 
 
@@ -286,11 +308,11 @@ def get_leagues(id: str | None = None):
     query = db.table("leagues").select("*").eq("is_active", True)
     if id:
         query = query.in_("id", id.split(","))
-    leagues = query.execute().data
+    leagues = execute(query).data
     return {"leagues": leagues}
 
 
 @app.get("/rooms/{room_id}/pool")
 def get_room_pool(room_id: str):
-    pool = db.table("pool").select("*").eq("room_id", room_id).execute().data
+    pool = execute(db.table("pool").select("*").eq("room_id", room_id)).data
     return {"pool": pool}
