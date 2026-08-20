@@ -20,6 +20,10 @@ export function getRoomPlayers(code) {
   return request(`/rooms/${code}/players`)
 }
 
+export function getRoom(roomId) {
+  return request(`/rooms/${roomId}`)
+}
+
 export function joinRoom(userId, code, displayName) {
   return request(`/rooms/${code}/join`, {
     method: 'POST',

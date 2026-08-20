@@ -3,6 +3,7 @@ import { AuthProvider } from './context/AuthContext'
 import { ProtectedRoute } from './components/ProtectedRoute'
 import Login from './pages/Login'
 import Home from './pages/Home'
+import Results from './pages/Results'
 import ComingSoon from './pages/ComingSoon'
 
 export default function App() {
@@ -40,7 +41,7 @@ export default function App() {
             path="/results"
             element={
               <ProtectedRoute>
-                <ComingSoon title="Results" />
+                <Results />
               </ProtectedRoute>
             }
           />

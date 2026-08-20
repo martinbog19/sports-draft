@@ -8,7 +8,8 @@
   --accent: #7C3AED;
   --accent-hover: #7C3AED;
   --success: #2fb170;
-  --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --negative: #ef4444;
+  --font: 'Space Grotesk', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
 }
 
 * {
@@ -93,4 +94,19 @@ button.secondary:disabled {
   color: var(--accent);
   font-size: 0.9rem;
   margin: 8px 0 0;
+}
+
+@keyframes skeleton-pulse {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+.skeleton {
+  background: linear-gradient(90deg, var(--surface-2) 25%, var(--border) 50%, var(--surface-2) 75%);
+  background-size: 200% 100%;
+  animation: skeleton-pulse 2.2s ease-in-out infinite;
 }
